@@ -3,8 +3,11 @@ package com.example.knife;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.WildcardTypeName;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
@@ -20,6 +23,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 
@@ -28,7 +32,10 @@ import javax.lang.model.util.Elements;
  */
 
 public class FieldGroup {
-    private static final String SUFFIX = "Model";
+    private static final String SUFFIX = "BindingModel";
+    private static final ClassName PARCEL_ABLE_CLASS_NAME = ClassName.get("android.os", "Parcelable");
+    private static final ClassName PARCEL_CLASS_NAME = ClassName.get("android.os", "Parcel");
+    private static final ClassName CREATOR_CLASS_NAME = ClassName.get("android.os", "Parcelable", "Creator");
     private String qualifiedClassName;
     private Map<String, TypeMirror> itemMap = new LinkedHashMap<>();
     private List<VariableElement> fields;
@@ -51,8 +58,9 @@ public class FieldGroup {
         String knifeClassSimpleName = currentClassElement.getSimpleName().toString() + SUFFIX;
         PackageElement packageElement = elementUtils.getPackageOf(currentClassElement);
 
-        String knifePackageName = packageElement.isUnnamed() ? null : packageElement.getQualifiedName().toString();
 
+        String knifePackageName = packageElement.isUnnamed() ? null : packageElement.getQualifiedName().toString();
+        //fields
         List<FieldSpec> fieldSpecs = new ArrayList<>();
         for (Map.Entry<String, TypeMirror> entry : itemMap.entrySet()) {
             TypeName fieldClassName = getTypeName(entry.getValue().getKind());
@@ -65,10 +73,57 @@ public class FieldGroup {
                     .build();
             fieldSpecs.add(fieldSpec);
         }
+        //Creator
+        FieldSpec creator = FieldSpec.builder(
+                ParameterizedTypeName.get(CREATOR_CLASS_NAME, ClassName.get(knifePackageName, knifeClassSimpleName)),
+                "CREATOR",
+                Modifier.PUBLIC,
+                Modifier.FINAL,
+                Modifier.STATIC)
+                .initializer(String.format(CREATOR_CODE_FORM,
+                        knifeClassSimpleName,
+                        knifeClassSimpleName,
+                        knifeClassSimpleName,
+                        knifeClassSimpleName,
+                        knifeClassSimpleName))
+                .build();
+
+        //constructor
+        MethodSpec constructor = MethodSpec.constructorBuilder()
+                .addParameter(PARCEL_CLASS_NAME, "in")
+                .build();
+
+        //Creator
+
+        //describeContents
+        MethodSpec describeContents = MethodSpec.methodBuilder("describeContents")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(int.class)
+                .addCode("return 0;\n")
+                .build();
+
+
+        //write to
+        MethodSpec write = MethodSpec.methodBuilder("writeToParcel")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(void.class)
+                .addParameter(PARCEL_CLASS_NAME, "parcel")
+                .addParameter(int.class, "i")
+                .build();
+        //java file content
         TypeSpec codeJava = TypeSpec.classBuilder(knifeClassSimpleName)
                 .addModifiers(Modifier.PUBLIC)
+                .addSuperinterface(PARCEL_ABLE_CLASS_NAME)
                 .addFields(fieldSpecs)
+                .addMethod(constructor)
+                .addField(creator)
+                .addMethod(describeContents)
+                .addMethod(write)
                 .build();
+
+
         JavaFile.builder(knifePackageName, codeJava).build().writeTo(filer);
     }
 
@@ -101,7 +156,6 @@ public class FieldGroup {
         String canonicalName = className.replaceAll("\\.([A-Z]+)", "\\$$1");
         String[] ss = canonicalName.split("\\$");
         ClassName resultClassName = null;
-        System.out.println(">>>>>>>>>>" + canonicalName);
         if (ss.length >= 2) {
             String packageName = ss[0];
             String typeName = ss[ss.length - 1];
@@ -112,8 +166,21 @@ public class FieldGroup {
             }
             resultClassName = ClassName.get(packageName, typeName);
         } else {
-            resultClassName = ClassName.get("android.os", "Parcelable");
+            resultClassName = PARCEL_ABLE_CLASS_NAME;
         }
         return resultClassName;
     }
+    //5 %s
+    private static final String CREATOR_CODE_FORM =
+            "new Creator<%s>() {\n" +
+                    "        @Override\n" +
+                    "        public %s createFromParcel(Parcel in) {\n" +
+                    "            return new %s(in);\n" +
+                    "        }\n" +
+                    "\n" +
+                    "        @Override\n" +
+                    "        public %s[] newArray(int size) {\n" +
+                    "            return new %s[size];\n" +
+                    "        }\n" +
+                    "    }";
 }
