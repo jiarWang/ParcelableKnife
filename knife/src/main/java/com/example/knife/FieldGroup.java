@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringTokenizer;
 
 import javax.annotation.processing.Filer;
 import javax.lang.model.element.Modifier;
@@ -154,6 +155,17 @@ public class FieldGroup {
     }
 
     private static ClassName getClassNameByName(String className) {
+        System.out.println("--------" + String.format("className = %s", className));
+        if (className.startsWith("java.lang") || className.startsWith("java.util")){
+            String[] ss = className.split("\\.",3);
+            String packageName = ss[0] + "." + ss[1];
+            String resultClassName = ss[2];
+            if (ss[2].contains("<")){
+                System.out.println(String.format(">>>>>>%s", resultClassName.split("<")[0]));
+                return ClassName.get(packageName, resultClassName.split("<")[0]);
+            }
+            return ClassName.get(packageName, resultClassName);
+        }
         String canonicalName = className.replaceAll("\\.([A-Z]+)", "\\$$1");
         String[] ss = canonicalName.split("\\$");
         ClassName resultClassName = null;
@@ -162,28 +174,39 @@ public class FieldGroup {
             String typeName = ss[ss.length - 1];
             //todo 设置白名单
             System.out.println("--------" + packageName);
-            if (!packageName.equals("java.lang")) {
+            if (!packageName.equals("java.lang") || !packageName.equals("java.util")) {
                 typeName = typeName + SUFFIX;
             }
+            System.out.println("--------" + String.format("typeName = %s", typeName));
             resultClassName = ClassName.get(packageName, typeName);
         } else {
             resultClassName = PARCEL_ABLE_CLASS_NAME;
         }
+        System.out.println("--------" + String.format("resultClassName = %s", resultClassName));
         return resultClassName;
     }
     private static String getModelSimpleNameByCanonicalName(String canonicalName){
+        System.out.println("getModelSimpleNameByCanonicalName ---" + canonicalName);
+        if (canonicalName.contains("java.util.List")){
+            return "List>" + canonicalName.substring(canonicalName.lastIndexOf(".") + 1, canonicalName.length() - 1)+SUFFIX;
+        }
         String modelName = canonicalName.replaceAll("\\.([A-Z]+)", "\\$$1");
         String[] ss = modelName.split("\\$");
         String resultClassName = null;
+        String packageName = "";
+
+
         if (ss.length >= 2) {
-            String packageName = ss[0];
+            packageName= ss[0];
             resultClassName = ss[ss.length - 1];
             //todo 设置白名单
 
-            if (!packageName.equals("java.lang")) {
+            if (!packageName.equals("java.lang") && !packageName.equals("java.util")) {
                 resultClassName = resultClassName + SUFFIX;
             }
         }
+
+        System.out.println("getModelSimpleNameByCanonicalName -->" + resultClassName);
         return resultClassName ;
     }
     //获取Constructor(Parcel parcel)内部书写格式
@@ -206,6 +229,9 @@ public class FieldGroup {
         }
         if (filedModelSimpleName.equals( "String")){
             return String.format("%s = in.readString();\n", fieldName);
+        }
+        if (filedModelSimpleName.contains("List>")){
+            return String.format("%s = in.createTypedArrayList(%s.CREATOR);\n", fieldName, filedModelSimpleName.split(">")[1]);
         }
         return String.format("%s = in.readParcelable(%s.class.getClassLoader());\n", fieldName, filedModelSimpleName);
     }

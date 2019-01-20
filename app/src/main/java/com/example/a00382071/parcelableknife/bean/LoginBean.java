@@ -2,6 +2,8 @@ package com.example.a00382071.parcelableknife.bean;
 
 import com.example.ParcelKnife;
 
+import java.util.List;
+
 /**
  * Created by 00382071 on 2019/1/19.
  */
@@ -9,6 +11,7 @@ import com.example.ParcelKnife;
 public class LoginBean {
 
     public ObjectBean object;
+    public List<ObjectBean> objectBeanList;
     @ParcelKnife
     public static class ObjectBean {
 
