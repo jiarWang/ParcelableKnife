@@ -1,5 +1,6 @@
 package com.example.knife;
 
+import com.example.ParcelKnife;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
@@ -38,9 +39,11 @@ public class FieldGroup {
     private String qualifiedClassName;
     private Map<String, TypeMirror> itemMap = new LinkedHashMap<>();
     private List<VariableElement> fields;
+    private String beanTag = "tag";
 
     public FieldGroup(TypeElement typeElement) {
         this.qualifiedClassName = typeElement.getQualifiedName().toString();
+        beanTag = typeElement.getAnnotation(ParcelKnife.class).beanTag();
         fields = ElementFilter.fieldsIn(typeElement.getEnclosedElements());
         for (VariableElement fieldElement : fields) {
             addField(fieldElement.getSimpleName().toString(), fieldElement.asType());
@@ -124,6 +127,7 @@ public class FieldGroup {
         TypeSpec codeJava = TypeSpec.classBuilder(knifeClassSimpleName)
                 .addModifiers(Modifier.PUBLIC)
                 .addSuperinterface(PARCEL_ABLE_CLASS_NAME)
+                .addJavadoc(String.format("BeanTag <==> %s", beanTag.replaceAll("\\$", ".")))
                 .addFields(fieldSpecs)
                 .addMethod(constructor)
                 .addField(creator)

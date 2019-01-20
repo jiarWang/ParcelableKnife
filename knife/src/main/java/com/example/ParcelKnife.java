@@ -8,5 +8,5 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.SOURCE)
 @Target(ElementType.TYPE)
 public @interface ParcelKnife {
-    String modelName() default "ParcelKnifeModel";
+    String beanTag() default "ParcelKnifeModel";
 }

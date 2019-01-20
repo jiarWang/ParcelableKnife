@@ -10,13 +10,16 @@ import java.util.List;
 /**
  * Created by 00382071 on 2019/1/19.
  */
-@ParcelKnife
+@ParcelKnife(beanTag = "LoginBean")
 public class LoginBean {
 
+    public int levelType;
+    public int teamMemberCount;
+    public int teamOrderCount;
     public ObjectBean object;
     public List<ObjectBean> objectBeanList;
     public List<String> objectBeanArray;
-    @ParcelKnife
+    @ParcelKnife(beanTag = "LoginBean$ObjectBean")
     public static class ObjectBean {
 
         public int key;
@@ -28,7 +31,7 @@ public class LoginBean {
         public int levelType;
         public int teamMemberCount;
         public int teamOrderCount;
-        @ParcelKnife
+        @ParcelKnife(beanTag = "LoginBean$ObjectBean$MemberBean")
         public static class MemberBean {
 
             public int key;
