@@ -1,7 +1,10 @@
 package com.example.a00382071.parcelableknife.bean;
 
+import android.util.ArraySet;
+
 import com.example.ParcelKnife;
 
+import java.lang.reflect.Array;
 import java.util.List;
 
 /**
@@ -12,6 +15,7 @@ public class LoginBean {
 
     public ObjectBean object;
     public List<ObjectBean> objectBeanList;
+    public List<String> objectBeanArray;
     @ParcelKnife
     public static class ObjectBean {
 

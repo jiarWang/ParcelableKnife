@@ -12,6 +12,8 @@ import java.util.List;
 public class TestModel implements Parcelable {
     int a;
     List strings;
+//    List<int> as;
+
 
 
     protected TestModel(Parcel in) {
@@ -40,5 +42,7 @@ public class TestModel implements Parcelable {
     @Override
     public void writeToParcel(Parcel parcel, int i) {
         parcel.writeInt(a);
+//        parcel.writeas);
+        parcel.writeTypedList(strings);
     }
 }

@@ -9,6 +9,7 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,7 +31,7 @@ import javax.lang.model.util.Elements;
  */
 
 public class FieldGroup {
-    private static final String SUFFIX = "BindingModel";
+    private static final String SUFFIX = "Model";
     private static final ClassName PARCEL_ABLE_CLASS_NAME = ClassName.get("android.os", "Parcelable");
     private static final ClassName PARCEL_CLASS_NAME = ClassName.get("android.os", "Parcel");
     private static final ClassName CREATOR_CLASS_NAME = ClassName.get("android.os", "Parcelable", "Creator");
@@ -53,26 +54,30 @@ public class FieldGroup {
 
     public void generateCode(Elements elementUtils, Filer filer) throws IOException {
         TypeElement currentClassElement = elementUtils.getTypeElement(qualifiedClassName);
+
         String knifeClassSimpleName = currentClassElement.getSimpleName().toString() + SUFFIX;
         PackageElement packageElement = elementUtils.getPackageOf(currentClassElement);
-
-
         String knifePackageName = packageElement.isUnnamed() ? null : packageElement.getQualifiedName().toString();
-        StringBuilder readBodyStr = new StringBuilder();
 
+
+        StringBuilder readBodyStr = new StringBuilder();
+        StringBuilder writeBodyStr = new StringBuilder();
         //fields
         List<FieldSpec> fieldSpecs = new ArrayList<>();
         for (Map.Entry<String, TypeMirror> entry : itemMap.entrySet()) {
             TypeName fieldClassName = getTypeName(entry.getValue().getKind());
+            //非基础类型
             if (fieldClassName == TypeName.OBJECT) {
-                fieldClassName = getClassNameByName(entry.getValue().toString());
+                fieldClassName = getModelTypeNameForField(entry.getValue().toString());
+                //fieldClassName = ClassName.get(entry.getValue());
             }
             FieldSpec fieldSpec = FieldSpec.builder(fieldClassName, entry.getKey())
                     .addModifiers(Modifier.PUBLIC)
                     .addJavadoc("")
                     .build();
             fieldSpecs.add(fieldSpec);
-            readBodyStr.append(getInForm(entry.getValue().getKind(), entry.getKey(), getModelSimpleNameByCanonicalName(entry.getValue().toString())));
+            readBodyStr.append(getInForm(entry.getValue().getKind(), entry.getKey(), getSimpleNameByCanonicalNameForModel(entry.getValue().toString())));
+            writeBodyStr.append(getOutForm(entry.getValue().getKind(), entry.getKey(), getSimpleNameByCanonicalNameForModel(entry.getValue().toString())));
         }
         //Creator
         FieldSpec creator = FieldSpec.builder(
@@ -111,6 +116,7 @@ public class FieldGroup {
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(void.class)
+                .addCode(writeBodyStr.toString())
                 .addParameter(PARCEL_CLASS_NAME, "parcel")
                 .addParameter(int.class, "i")
                 .build();
@@ -150,45 +156,71 @@ public class FieldGroup {
         return TypeName.OBJECT;
     }
 
-    private String getCanonicalNameBySimpleName(String className) {
-        return className.replaceAll("([A-Z]+[\\w]*)\\.", "$1\\$");
-    }
 
-    private static ClassName getClassNameByName(String className) {
-        System.out.println("--------" + String.format("className = %s", className));
-        if (className.startsWith("java.lang") || className.startsWith("java.util")){
-            String[] ss = className.split("\\.",3);
-            String packageName = ss[0] + "." + ss[1];
-            String resultClassName = ss[2];
-            if (ss[2].contains("<")){
-                System.out.println(String.format(">>>>>>%s", resultClassName.split("<")[0]));
-                return ClassName.get(packageName, resultClassName.split("<")[0]);
+    private static TypeName getModelTypeNameForField(String classCanonicalName) {
+        TypeName resultTypeName = PARCEL_ABLE_CLASS_NAME;
+        String packageName = "", classSimpleName = "";
+        if (classCanonicalName.startsWith("java.lang")){
+            packageName = "java.lang";
+            classSimpleName = classCanonicalName.substring(10);// 10 = "java.lang.".length()
+            resultTypeName = ClassName.get(packageName, classSimpleName);
+        }else if(classCanonicalName.startsWith("java.util")){
+            packageName = "java.util";
+            classSimpleName = classCanonicalName.substring(10);// 10 = "java.util.".length()
+            String insideClassName = classSimpleName.substring(
+                    classSimpleName.indexOf("<") + 1,
+                    classSimpleName.indexOf(">")
+            ).replaceAll("\\.([A-Z])", "\\$$1");
+
+            String insidePackageName = insideClassName.substring(
+                    0,
+                    insideClassName.indexOf("$")
+            );
+            StringBuffer insideTypename = new StringBuffer();
+            insideTypename.append(classSimpleName.substring(
+                    classSimpleName.lastIndexOf(".") + 1,
+                    classSimpleName.length() - 1
+            ));
+            System.out.println("---- insidePackageName ->" + insidePackageName);
+            if (!(insidePackageName.startsWith("java.lang") || insidePackageName.startsWith("java.util"))){
+                insideTypename.append(SUFFIX);
             }
-            return ClassName.get(packageName, resultClassName);
-        }
-        String canonicalName = className.replaceAll("\\.([A-Z]+)", "\\$$1");
-        String[] ss = canonicalName.split("\\$");
-        ClassName resultClassName = null;
-        if (ss.length >= 2) {
-            String packageName = ss[0];
-            String typeName = ss[ss.length - 1];
-            //todo 设置白名单
-            System.out.println("--------" + packageName);
-            if (!packageName.equals("java.lang") || !packageName.equals("java.util")) {
-                typeName = typeName + SUFFIX;
+            resultTypeName = ParameterizedTypeName.get(
+                    ClassName.get(packageName, classSimpleName.substring(0, classSimpleName.indexOf("<"))),
+                    ClassName.get(
+                            insidePackageName,
+                            insideTypename.toString()
+                    )
+            );
+        }else {
+            if (classCanonicalName.contains("<")){
+                try {
+                    throw new Exception("the Type of field should not be ParameterizedType");
+                } catch (Exception e) {
+                    //e.printStackTrace();
+                }
             }
-            System.out.println("--------" + String.format("typeName = %s", typeName));
-            resultClassName = ClassName.get(packageName, typeName);
-        } else {
-            resultClassName = PARCEL_ABLE_CLASS_NAME;
+            String className = classCanonicalName.replaceAll("\\.([A-Z]+)","\\$$1");
+            System.out.println(String.format("\n %s,\n %s", classCanonicalName, className));
+            String[] classInfo = className.split("\\$", 2);
+            packageName = classInfo[0];
+            classSimpleName = className.substring(className.lastIndexOf("$") + 1, className.length()) + SUFFIX ;
+            resultTypeName = ClassName.get(packageName, classSimpleName);
         }
-        System.out.println("--------" + String.format("resultClassName = %s", resultClassName));
-        return resultClassName;
+        return resultTypeName;
     }
-    private static String getModelSimpleNameByCanonicalName(String canonicalName){
-        System.out.println("getModelSimpleNameByCanonicalName ---" + canonicalName);
-        if (canonicalName.contains("java.util.List")){
-            return "List>" + canonicalName.substring(canonicalName.lastIndexOf(".") + 1, canonicalName.length() - 1)+SUFFIX;
+    private static String getSimpleNameByCanonicalNameForModel(String canonicalName){
+        if (canonicalName.contains("java.util") && canonicalName.contains("<")){
+            String insideClassName = canonicalName.substring(canonicalName.lastIndexOf("<") + 1, canonicalName.length() - 1);
+            String modelName = insideClassName.substring(insideClassName.lastIndexOf(".") + 1, insideClassName.length());
+            if(insideClassName.startsWith("java.util") || insideClassName.startsWith("java.lang")){
+            }else{
+                modelName += SUFFIX;
+            }
+
+            return canonicalName.substring(10, canonicalName.indexOf("<"))
+                    + "|"
+                    + modelName;
         }
         String modelName = canonicalName.replaceAll("\\.([A-Z]+)", "\\$$1");
         String[] ss = modelName.split("\\$");
@@ -200,18 +232,14 @@ public class FieldGroup {
             packageName= ss[0];
             resultClassName = ss[ss.length - 1];
             //todo 设置白名单
-
             if (!packageName.equals("java.lang") && !packageName.equals("java.util")) {
                 resultClassName = resultClassName + SUFFIX;
             }
         }
-
-        System.out.println("getModelSimpleNameByCanonicalName -->" + resultClassName);
         return resultClassName ;
     }
     //获取Constructor(Parcel parcel)内部书写格式
     private static final String getInForm(TypeKind typeKind,String fieldName, String filedModelSimpleName){
-        System.out.println("--------" + String.format("typekind = %s, fieldName = %s, modelName = %s", typeKind.toString(), fieldName, filedModelSimpleName));
         if (typeKind == TypeKind.BOOLEAN) {
             return String.format("%s = in.readByte(%s != 0 );\n", fieldName, fieldName);
         } else if (typeKind == TypeKind.BYTE) {
@@ -230,10 +258,46 @@ public class FieldGroup {
         if (filedModelSimpleName.equals( "String")){
             return String.format("%s = in.readString();\n", fieldName);
         }
-        if (filedModelSimpleName.contains("List>")){
-            return String.format("%s = in.createTypedArrayList(%s.CREATOR);\n", fieldName, filedModelSimpleName.split(">")[1]);
+        if (filedModelSimpleName.contains("|")){
+            String insideTypeName = filedModelSimpleName.split("\\|")[1];
+            if (insideTypeName.contains(SUFFIX)){
+                return String.format("%s = in.createTypedArrayList(%s.CREATOR);\n", fieldName, filedModelSimpleName.split("\\|")[1]);
+            }else{
+                return String.format("%s = in.readArrayList(%s.class.getClassLoader());\n", fieldName, filedModelSimpleName.split("\\|")[1]);
+            }
+
         }
         return String.format("%s = in.readParcelable(%s.class.getClassLoader());\n", fieldName, filedModelSimpleName);
+    }
+
+    private static final String getOutForm(TypeKind typeKind,String fieldName, String filedModelSimpleName){
+        if (typeKind == TypeKind.BOOLEAN) {
+            return String.format("parcel.writeByte((byte)(%s ? 0 : 1 ) );\n", fieldName, fieldName);
+        } else if (typeKind == TypeKind.BYTE) {
+            return String.format("parcel.writeByte(%s);\n", fieldName);
+        } else if (typeKind == TypeKind.SHORT) {
+            return String.format("parcel.writeInt(%s);\n", fieldName);
+        } else if (typeKind == TypeKind.INT) {
+            return String.format("parcel.writeInt(%s);\n", fieldName);
+        } else if (typeKind == TypeKind.LONG) {
+            return String.format("parcel.writeLong(%s);\n", fieldName);
+        }  else if (typeKind == TypeKind.FLOAT) {
+            return String.format("parcel.writeFloat(%s);\n", fieldName);
+        } else if (typeKind == TypeKind.DOUBLE) {
+            return String.format("parcel.writeDouble(%s);\n", fieldName);
+        }
+        if (filedModelSimpleName.equals( "String")){
+            return String.format("parcel.writeString(%s);\n", fieldName);
+        }
+        if (filedModelSimpleName.contains("|")){
+            String insideTypeName = filedModelSimpleName.split("\\|")[1];
+            if (insideTypeName.contains(SUFFIX)){
+                return String.format("parcel.writeTypedList(%s);\n", fieldName, filedModelSimpleName.split("\\|")[1]);
+            }else{
+                return String.format("parcel.writeStringList(%s);\n", fieldName, filedModelSimpleName.split("\\|")[1]);
+            }
+        }
+        return String.format("parcel.writeParcelable(%s, i);\n", fieldName, filedModelSimpleName);
     }
 
     //5 %s
