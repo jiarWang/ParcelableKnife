@@ -14,8 +14,6 @@ import java.util.List;
 public class LoginBean {
 
     public int levelType;
-    public int teamMemberCount;
-    public int teamOrderCount;
     public ObjectBean object;
     public List<ObjectBean> objectBeanList;
     public List<String> objectBeanArray;
