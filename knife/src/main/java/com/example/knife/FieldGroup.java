@@ -7,10 +7,8 @@ import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
-import com.squareup.javapoet.WildcardTypeName;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,7 +21,6 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 
@@ -60,6 +57,8 @@ public class FieldGroup {
 
 
         String knifePackageName = packageElement.isUnnamed() ? null : packageElement.getQualifiedName().toString();
+        StringBuilder readBodyStr = new StringBuilder();
+
         //fields
         List<FieldSpec> fieldSpecs = new ArrayList<>();
         for (Map.Entry<String, TypeMirror> entry : itemMap.entrySet()) {
@@ -72,6 +71,7 @@ public class FieldGroup {
                     .addJavadoc("")
                     .build();
             fieldSpecs.add(fieldSpec);
+            readBodyStr.append(getInForm(entry.getValue().getKind(), entry.getKey(), getModelSimpleNameByCanonicalName(entry.getValue().toString())));
         }
         //Creator
         FieldSpec creator = FieldSpec.builder(
@@ -91,6 +91,7 @@ public class FieldGroup {
         //constructor
         MethodSpec constructor = MethodSpec.constructorBuilder()
                 .addParameter(PARCEL_CLASS_NAME, "in")
+                .addCode(readBodyStr.toString())
                 .build();
 
         //Creator
@@ -170,6 +171,45 @@ public class FieldGroup {
         }
         return resultClassName;
     }
+    private static String getModelSimpleNameByCanonicalName(String canonicalName){
+        String modelName = canonicalName.replaceAll("\\.([A-Z]+)", "\\$$1");
+        String[] ss = modelName.split("\\$");
+        String resultClassName = null;
+        if (ss.length >= 2) {
+            String packageName = ss[0];
+            resultClassName = ss[ss.length - 1];
+            //todo 设置白名单
+
+            if (!packageName.equals("java.lang")) {
+                resultClassName = resultClassName + SUFFIX;
+            }
+        }
+        return resultClassName ;
+    }
+    //获取Constructor(Parcel parcel)内部书写格式
+    private static final String getInForm(TypeKind typeKind,String fieldName, String filedModelSimpleName){
+        System.out.println("--------" + String.format("typekind = %s, fieldName = %s, modelName = %s", typeKind.toString(), fieldName, filedModelSimpleName));
+        if (typeKind == TypeKind.BOOLEAN) {
+            return String.format("%s = in.readByte(%s != 0 );\n", fieldName, fieldName);
+        } else if (typeKind == TypeKind.BYTE) {
+            return String.format("%s = in.readByte();\n", fieldName);
+        } else if (typeKind == TypeKind.SHORT) {
+            return String.format("%s = (short)in.readInt();\n", fieldName);
+        } else if (typeKind == TypeKind.INT) {
+            return String.format("%s = in.readInt();\n", fieldName);
+        } else if (typeKind == TypeKind.LONG) {
+            return String.format("%s = in.readLong();\n", fieldName);
+        }  else if (typeKind == TypeKind.FLOAT) {
+            return String.format("%s = in.readFloat();\n", fieldName);
+        } else if (typeKind == TypeKind.DOUBLE) {
+            return String.format("%s = in.readDouble();\n", fieldName);
+        }
+        if (filedModelSimpleName.equals( "String")){
+            return String.format("%s = in.readString();\n", fieldName);
+        }
+        return String.format("%s = in.readParcelable(%s.class.getClassLoader());\n", fieldName, filedModelSimpleName);
+    }
+
     //5 %s
     private static final String CREATOR_CODE_FORM =
             "new Creator<%s>() {\n" +

@@ -10,8 +10,10 @@ import android.os.Parcelable;
 public class TestModel implements Parcelable {
     int a;
 
+
     protected TestModel(Parcel in) {
         a = in.readInt();
+//        in.readString()
     }
 
     public static final Creator<TestModel> CREATOR = new Creator<TestModel>() {
