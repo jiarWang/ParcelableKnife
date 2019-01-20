@@ -1,6 +1,6 @@
 # ParcelKnife
 
-一款通过注解可以由`xxxBean`自动生成`xxxBeanModel implements Parcelable`的工具。
+[`ParcelKnife`](https://github.com/jiarWang/ParcelableKnife/blob/master/knife.jar):一款通过注解可以由`xxxBean`自动生成`xxxBeanModel implements Parcelable`的工具。
 
 ## 描述
 
@@ -22,7 +22,7 @@
 
 1) 下载与导入`knife.jar`
 
-下载`knife.jar`，并将`jar`包放入`MyApplication/app/libs`；
+下载[`knife.jar`](https://github.com/jiarWang/ParcelableKnife/blob/master/knife.jar)，并将`jar`包放入`MyApplication/app/libs`；
 
 2) 添加注解处理器与`Javapoet`相关依赖，并应用`ParcelKnife`
 ```gradle
